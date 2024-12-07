@@ -1,16 +1,14 @@
 import base64
 import json
-from io import BytesIO
-
 import customtkinter as ctk
 import threading as th
-
-from mss import mss
 import socket
-
-from PIL import Image, ImageTk
-
 import api_calls
+import uuid
+
+from io import BytesIO
+from mss import mss
+from PIL import Image, ImageTk
 
 
 class ErrorAlert(ctk.CTk):
@@ -52,22 +50,29 @@ class Login(ctk.CTk):
         self.login_button.pack(side='top', pady=10, padx=10)
 
     def login(self):
-        response = api_calls.login(self.username_input.get(), self.password_input.get())
-
-        if response['status'] == 'success':
             self.destroy()
-            app = DesktopCastClient(response['data']['data']['userId'])
-            app.mainloop()
-        else:
-            error_alert = ErrorAlert("Unauthorized")
-            error_alert.mainloop()
+            _app = DesktopCastClient("fd0161ce-93a5-42bc-a3fa-f34c9bccce6b")
+            _app.mainloop()
+        # response = api_calls.login(self.username_input.get(), self.password_input.get())
+        #
+        # print(response)
+        #
+        # if response['status'] == 'success':
+        #     self.destroy()
+        #     _app = DesktopCastClient(response['data']['data']['userUuid'])
+        #     _app.mainloop()
+        #
+        # else:
+        #     error_alert = ErrorAlert("Unauthorized")
+        #     error_alert.mainloop()
 
 
 class DesktopCastClient(ctk.CTk):
-    def __init__(self, userId):
+    def __init__(self, user_uuid):
         ctk.CTk.__init__(self)
 
-        self.user_id = userId
+        self.user_uuid = user_uuid
+        self.stream_uuid = None
 
         self.image_on_canvas = None
         self.title('Desktop Cast Client')
@@ -82,12 +87,6 @@ class DesktopCastClient(ctk.CTk):
         self.stream_frame = ctk.CTkFrame(self)
         self.stream_frame.pack(side='left', fill='both', expand=True, padx=10, pady=10)
 
-        self.title_stream_label = ctk.CTkLabel(self.options_frame, text='Stream title')
-        self.title_stream_label.pack(side='top', pady=10, padx=10)
-
-        self.title_stream_input = ctk.CTkEntry(self.options_frame)
-        self.title_stream_input.pack(side='top', pady=10, padx=10)
-
         self.stream_description_label = ctk.CTkLabel(self.options_frame, text='Stream description')
         self.stream_description_label.pack(side='top', pady=10, padx=10)
 
@@ -100,27 +99,44 @@ class DesktopCastClient(ctk.CTk):
         self.stream_canvas = ctk.CTkCanvas(self.stream_frame, bg='black')
         self.stream_canvas.pack(side='left', fill='both', expand=True)
 
+        self.stream_publish_button = ctk.CTkButton(self.options_frame, text='Publish', command=self.publish_stream)
+        self.stream_publish_button.pack(side='top', pady=10, padx=10)
+
+    def publish_stream(self):
+
+        payload = {
+            "body": self.stream_description_input.get(),
+            "type": "stream",
+            "resource": "",
+            "user_uuid": self.user_uuid,
+            "resource_type": "PICTURE",
+            "secondary_item_uuid": self.stream_uuid
+        }
+
+        response = api_calls.publish(payload)
+
+        if response['status'] == 'success':
+            print('Stream published')
+
     def start_stream(self):
         sct = mss()
-        monitor = sct.monitors[0]  # Use the first monitor
+        monitor = sct.monitors[0]
 
-        stream = api_calls.create_stream(
-            self.title_stream_input.get(),
-            self.stream_description_input.get(),
-            self.user_id
-        )
+        self.stream_uuid = str(uuid.uuid4())
 
-        # Make connection
         message = {
             "type": "Connect",
             "data": {
                 "is_streamer": 1,
-                "stream_id": stream['data']['id']
+                "stream_uuid": self.stream_uuid,
+                "user_uuid": self.user_uuid
             }
         }
 
+        print(message)
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = ('localhost', 1935)
+        server_address = ('192.168.0.118', 1998)
         print('connecting to {} port {}'.format(*server_address))
         sock.connect(server_address)
 
